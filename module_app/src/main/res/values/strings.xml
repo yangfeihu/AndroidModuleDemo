@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Android组件化开发</string>
+
+    <string name="global_scheme">module</string>
+
+
+</resources>

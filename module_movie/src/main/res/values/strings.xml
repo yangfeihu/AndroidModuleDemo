@@ -1,0 +1,4 @@
+<resources>
+    <string name="movie_name">Movie组件</string>
+    <string name="movie_activity_title">Movie</string>
+</resources>

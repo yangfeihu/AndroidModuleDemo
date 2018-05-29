@@ -1,0 +1,6 @@
+include ':lib_common',
+        ':module_app',
+        ':module_main',
+        ':module_movie',
+        ':module_news'
+        
