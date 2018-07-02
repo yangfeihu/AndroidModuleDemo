@@ -1,16 +1,133 @@
+Android 组件化开发详解
+1.什么是组件化开发 
+组件化开发就是将一个app分成多个模块，每个模块都是一个组件（Module），开发的过程中我们可以让这些组件相互依赖或者单独调试部分组件等，但是最终发布的时候是将这些组件合并统一成一个apk，这就是组件化开发。
+注：关于什么是组件，这种概念性的东西可能各有各的见解，我也不想过于去纠结这种定义。虽然大家理解上有差异，但核心的思想都是为了项目解耦。有些文章会对组件和模块进行区分，大家有兴趣可以看下：https://www.jianshu.com/p/60c1b9ddd8ab 。我就不作过多的区分了，头晕~
 
-## License
+2.为什么需要项目组件化
+随着APP版本不断的迭代，业务也会变的越来越复杂，这样发展下去单一工程下的APP架构势必会影响开发效率，增加项目的维护成本。每个工程师都要熟悉如此之多的代码，将很难进行多人协作开发，而且Android项目在编译的时候需要耗费很长的时间。又因为单一工程下代码耦合严重，每修改一处代码后都要重新编译打包测试，导致非常耗时，最重要的是这样的代码想要做单元测试根本无从下手，所以必须要有更灵活的架构代替过去单一的工程架构。
+常规单工程+MVC/MVP/MVVM项目：
+ 
 
-    Copyright 2017 guiying712, AndroidModulePattern Open Source Project
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+上图单一工程模型下的业务关系，总的来说就是：你中有我，我中有你，相互依赖，无法分离。 
+然而随着产品的迭代，业务越来越复杂，随之带来的是项目结构复杂度的极度增加，此时我们会面临如下几个问题：
+1.	改动任何代码都要编译整个工程，耗时耗力
+2、公共资源、业务、模块混在一起耦合度太高，牵一发而动全身
+3、功能测试和系统测试每次都要进行；
+4、团队协同开发存在较多的冲突.不得不花费更多的时间去沟通和协调，并且在开发过程中，任何一位成员没办法专注于自己的功能点，影响开发效率； 
+5、不能灵活的对业务模块进行配置和组装；
+为了满足各个业务模块的迭代而彼此不受影响，更好的解决上面这种让人头疼的依赖关系，就需要整改
+App的架构。
+ 
+                                      图片来源于网络
 
-        http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+
+上图是组件化工程模型，为了方便理解这张架构图，下面会列举一些组件化工程中用到的名词的含义：
+名词	含义
+集成模式	所有的业务组件被“app壳工程”依赖，组成一个完整的APP；
+组件模式	可以独立开发业务组件，每一个业务组件就是一个APP；
+app壳工程	负责管理各个业务组件，和打包apk，没有具体的业务功能；
+业务组件	根据公司具体业务而独立形成一个的工程；
+功能组件	提供开发APP的某些基础功能，例如打印日志、树状图等；
+Main组件	属于业务组件，指定APP启动页面、主界面；
+Common组件	属于功能组件，支撑业务组件的基础，提供多数业务组件需要的功能，例如提供网络请求功能；
+
+Android APP组件化架构的目标是告别结构臃肿，让各个业务变得相对独立，业务组件在组件模式下
+可以独立开发，而在集成模式下又可以变为arr包集成到“app壳工程”中，组成一个完整功能的APP；
+整改的方向由一个项目工程拆分成若干个模块工程，由app壳工程提供统一的入口，每个业务独立的模
+块module共享项目的依赖库。由壳工程集成需要引入的业务模块，至于各个独立的业务模块之间的调
+用依赖关系，我们借助一个中间层充当路由功能，这个路由我们放在各个业务模块共同引用的依赖库那
+一层。由路由统一调度他们之间的依赖关系，路由调度解决平级依赖问题示意图：
+ 
+通过APP壳工程提供的路由功能，各个模块之间调用不再采用传统的显式调用，而是采用隐式调用的方式。从而使各个模块之间不再存在依赖关系。
+注：路由其实是对android URL协议的的封装，可以了解下https://www.cnblogs.com/whoislcj/p/5825333.html
+ 
+
+3、组件化实施流程
+3.1）组件模式和集成模式的转换
+Android Studio中的Module主要有两种属性，分别为：
+1、application属性，可以独立运行的Android程序，也就是我们的APP；
+apply plugin: ‘com.android.application’
+2、library属性，不可以独立运行，一般是Android程序依赖的库文件；
+apply plugin: ‘com.android.library’
+Module的属性是在每个组件的 build.gradle 文件中配置的，当我们在组件模式开发时，业务组件应处于application属性，这时的业务组件就是一个 Android App，可以独立开发和调试；而当我们转换到集成模式开发时，业务组件应该处于 library 属性，这样才能被我们的“app壳工程”所依赖，组成一个具有完整功能的APP
+但是我们如何让组件在这两种模式之间自动转换呢？其实很简单，只要在gradle.properties中添加一个常量 isModule（是否是组件开发模式，true为是，false为否），然后我们在业务组件的build.gradle中读取 isModule即可：
+ 
+每次改变isModule的值后，都要同步项目才能生效；
+3.2）组件之间AndroidManifest合并问题
+在 Android Studio 中每一个组件都会有对应的 AndroidManifest.xml，用于声明需要的权限、Application、Activity、Service、Broadcast等，当项目处于组件模式时，业务组件的 AndroidManifest.xml 应该具有一个 Android APP 所具有的的所有属性，尤其是声明 Application 和要 launch的Activity，但是当项目处于集成模式的时候，每一个业务组件的 AndroidManifest.xml 都要合并到“app壳工程”中，要是每一个业务组件都有自己的 Application 和 launch的Activity，那么合并的时候肯定会冲突，试想一个APP怎么可能会有多个 Application 和 launch 的Activity呢？
+那么怎么解决AndroidManifest.xml合并冲突的问题呢？其实只要为组件模式和集成模式各准备一个AndroidManifest.xml，然后根据isModule来让业务组件在集成模式和组件模式下使用不同的AndroidManifest.xml这样表单冲突的问题就可以规避了。
+ 
+上图是组件化项目中一个标准的业务组件目录结构，首先我们在main文件夹下创建一个module文件夹用于存放组件开发模式下业务组件的 AndroidManifest.xml，而 AndroidStudio 生成的 AndroidManifest.xml 则依然保留，并用于集成开发模式下业务组件的表单；然后我们需要在业务组件的 build.gradle 中指定表单的路径，代码如下：
+  
+这样在不同的开发模式下就会读取到不同的 AndroidManifest.xml ，然后我们需要修改这两个表单的内容以为我们不同的开发模式服务。首先是集成开发模式下的 AndroidManifest.xml，前面我们说过集成模式下，业务组件的表单是绝对不能拥有自己的 Application 和 launch 的 Activity的，也不能声明APP名称、图标等属性，总之app壳工程有的属性，业务组件都不能有。组件模式下的业务组件表单就是一个Android项目普通的AndroidManifest.xml，这里就不在过多介绍了。
+3.3）全局Context的获取及组件数据初始化
+但是我们在组件化开发的时候，可能为了数据的问题每一个组件都会自定义一个Application类，如果我们在自己的组件中开发时需要获取 全局的Context，一般都会直接获取 application 对象，但是当所有组件要打包合并在一起的时候就会出现问题，因为最后程序只有一个 Application，我们组件中自己定义的 Application 肯定是没法使用的，因此我们需要想办法再任何一个业务组件中都能获取到全局的 Context，而且这个 Context 不管是在组件开发模式还是在集成开发模式都是生效的。
+在组件化工程模型图中，功能组件集合中有一个 Common 组件， Common 有公共、公用、共同的意思，所以这个组件中主要封装了项目中需要的基础功能，并且每一个业务组件都要依赖Common组件，Common 组件就像是万丈高楼的地基，而业务组件就是在 Common 组件这个地基上搭建起来我们的APP的，Common 组件会专门在一个章节中讲解，这里只讲 Common组件中的一个功能，在Common组件中我们封装了项目中用到的各种Base类，这些基类中就有BaseApplication 类。
+但是，实际上业务组件中的Application在最终的集成项目中是没有什么实际作用的，组件自己的 Application 仅限于在组件模式下发挥功能，因此我们需要在将项目从组件模式转换到集成模式后将组件自己的Application剔除出我们的项目；在 AndroidManifest 合并问题小节中介绍了如何在不同开发模式下让 Gradle 识别组件表单的路径，这个方法也同样适用于Java代码；
+ 
+接下来在业务组件的 build.gradle 中，根据 isModule 是否是集成模式将 debug 这个 Java代码文件夹排除：
+    
+3.4）library依赖问题
+在build.gradle中compile的第三方库，例如Android Support库经常会被一些开源的控件所依赖，而我们自己一定也会compile Android Support库 ，这就会造成第三方包和我们自己的包存在重复加载，解决办法就是找出那个多出来的库，并将多出来的库给排除掉，而且Gradle也是支持这样做的，分别有两种方式：根据组件名排除或者根据包名排除，下面以排除support-v4库为例：
+dependencies {
+    compile fileTree(dir: 'libs', include: ['*.jar'])
+    compile("com.jude:easyrecyclerview:$rootProject.easyRecyclerVersion") {
+        exclude module: 'support-v4'//根据组件名排除
+        exclude group: 'android.support.v4'//根据包名排除
+    }
+}
+library重复依赖的问题算是都解决了，但是我们在开发项目的时候会依赖很多开源库，而这些库每个组件都需要用到，要是每个组件都去依赖一遍也是很麻烦的，尤其是给这些库升级的时候，为了方便我们统一管理第三方库，我们将给给整个工程提供统一的依赖第三方库的入口，前面介绍的Common库的作用之一就是统一依赖开源库，因为其他业务组件都依赖了Common库，所以这些业务组件也就间接依赖了Common所依赖的开源库。
+ 
+3.5）组件之间调用和通信
+在组件化开发的时候，组件之间是没有依赖关系，我们不能在使用显示调用来跳转页面了，因为我们组件化的目的之一就是解决模块间的强依赖问题，假如现在要从A业务组件跳转到业务B组件，并且要携带参数跳转，这时候怎么办呢？而且组件这么多怎么管理也是个问题，这时候就需要引入“路由”的概念了，这里我使用的是阿里的“ARouter” （https://github.com/alibaba/ARouter）。
+下面将介绍如何将ARouter集成到组件化项目中以实现组件之间的调用；
+1、首先我们需要在 Common 组件中的 build.gradle 将ARouter依赖进来，方便我们在业务组件中调用：
+  
+2、务组件中的Activity定义 URL
+ 
+其中的Path.PAHT_MOVIE如下：
+public static final String PAHT_MOVIE = "/movie/list";
+然后我们就可以在项目中的任何一个地方通过 URL地址 ：/movie/list, 调用MovieActivity，方法如下：
+      ARouter.getInstance().build(Path.PAHT_MOVIE).navigation();
+组件之间的调用解决后，另外需要解决的就是组件之间的通信，例如A业务组件中有消息列表，而用户在B组件中操作某个事件后会产生一条新消息，需要通知A组件刷新消息列表，这样业务场景需求可以使用Android广播来解决，也可以使用第三方的事件总线来实现，比如EventBus。
+3.6）组件之间资源名冲突
+因为我们拆分出了很多业务组件和功能组件，在把这些组件合并到“app壳工程”时候就有可能会出现资源名冲突问题，解决这个问题最简单的办法就是在项目中约定资源文件命名规范，比如强制使每个资源文件的名称以组件名开始，通过在在组件的build.gradle中添加如下的代码：
+    resourcePrefix "movie_"
+但是设置了这个属性后有个问题，所有的资源名必须以指定的字符串做前缀，否则会报错，而且resourcePrefix这个值只能限定xml里面的资源，并不能限定图片资源，所有图片资源仍然需要手动去修改资源名；所以我并不推荐使用这种方法来解决资源名冲突。
+4、组件化项目的工程类型
+在组件化工程模型中主要有：app壳工程、业务组件和功能组件3种类型，而业务组件中的Main组件和功能组件中的Common组件比较特殊，下面将分别介绍。
+5、组件化项目的混淆方案
+组件化项目的Java代码混淆方案采用在集成模式下集中在app壳工程中混淆，各个业务组件不配置混淆文件。之所以不采用在每个业务组件中开启混淆的方案，是因为 组件在集成模式下都被 Gradle 构建成了 release 类型的arr包，一旦业务组件的代码被混淆，而这时候代码中又出现了bug，将很难根据日志找出导致bug的原因；另外每个业务组件中都保留一份混淆配置文件非常不便于修改和管理，这也是不推荐在业务组件的 build.gradle 文件中配置 buildTypes （构建类型）的原因。
+6、组件功能介绍
+app组件功能（空壳工程）：
+
+配置整个项目的Gradle脚本，例如 混淆、签名等
+app组件中可以初始化全局的库，例如Lib.init(this)
+添加 multiDex 功能
+业务组件管理（组装）
+
+main组件功能（业务组件）：
+
+声明应用的launcherActivity----->android.intent.category.LAUNCHER；
+
+组件功能（业务组件）：
+
+根据产品的业务逻辑独立成一个组件；
+
+
+common组件功能（功能组件）：
+
+common组件是基础库，添加一些公用的类；
+例如：网络请求、图片加载、工具类、base类等等；
+声明APP需要的uses-permission；
+定义全局通用的主题（Theme）；
+
+7、总结
+组件化相比于单一工程优势是显而易见的：
+1.	组件模式下可以加快编译速度，提高开发效率；
+2.	自由选择开发框架（MVC /MVP / MVVM /）；
+3.	方便做单元测试；
+4.	代码架构更加清晰，降低项目的维护难度；
+5.	适合于团队开发；
